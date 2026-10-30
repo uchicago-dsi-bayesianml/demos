@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Metropolis on Two Humps · Bayesian Machine Learning</title>
+<meta name="description" content="The Metropolis algorithm on a two-humped target, one step at a time or five thousand at speed, with the proposal width as the knob.">
+<style>
+@font-face { font-family: "Chivo"; src: url("../fonts/Chivo-Regular.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Chivo"; src: url("../fonts/Chivo-Italic.ttf") format("truetype"); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: "Chivo"; src: url("../fonts/Chivo-Bold.ttf") format("truetype"); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "Chivo"; src: url("../fonts/Chivo-Black.ttf") format("truetype"); font-weight: 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "Chivo Mono"; src: url("../fonts/ChivoMono-Regular.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: swap; }
+
+/* The Chivo Grid colours of the course slides */
+:root {
+  --ink: #101014; --maroon: #800000; --cream: #F3E7D3; --mute: #6A6A72;
+  --hair: #DCDCE0; --panel: #F4F4F6; --reverse: #F8F4EF;
+  --sans: "Chivo", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --mono: "Chivo Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: #fff; color: var(--ink); font-family: var(--sans); }
+.wrap { max-width: 1680px; margin: 0 auto; padding: clamp(14px, 2.2vw, 36px) clamp(16px, 3vw, 56px) 20px; }
+
+.chrome { display: flex; justify-content: space-between; gap: 16px; border-top: 2px solid var(--ink); padding-top: 9px;
+  font: 12px/1.3 var(--mono); letter-spacing: .18em; text-transform: uppercase; color: var(--mute); }
+.chrome b { color: var(--ink); font-weight: 400; }
+h1 { font: 900 clamp(28px, 3.2vw, 52px)/1.05 var(--sans); margin: .32em 0 .22em; letter-spacing: -.01em; }
+.lede { font-size: clamp(15px, 1.15vw, 19px); line-height: 1.45; margin: 0 0 14px; max-width: 76em; }
+
+.banner { display: flex; align-items: center; gap: clamp(14px, 2vw, 32px); background: var(--cream); border-radius: 10px;
+  padding: 12px 20px; min-height: 66px; }
+.where { display: flex; flex-direction: column; gap: 7px; flex: none; min-width: 13.5em;
+  font: 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--maroon); }
+.dots i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--maroon); margin-right: 6px; }
+.dots i.on { background: var(--maroon); }
+.what { font-size: clamp(16px, 1.3vw, 21px); line-height: 1.35; }
+.what .mv { color: var(--maroon); }
+.what .st { color: var(--mute); }
+
+.stage { cursor: pointer; user-select: none; -webkit-user-select: none; margin: 16px 0; }
+.row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(12px, 1.5vw, 26px); }
+@media (max-width: 960px) { .row3 { grid-template-columns: 1fr; } .where { min-width: 0; } }
+.panel { margin: 0; border: 1px solid var(--hair); border-radius: 10px; padding: 12px 12px 4px; background: #fff; }
+.panel figcaption { display: flex; flex-direction: column; gap: 5px; min-height: 4.6em; }
+.trace { margin-top: clamp(12px, 1.5vw, 26px); }
+.trace figcaption { min-height: 0; flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 4px 18px; }
+.kick { font: 11px/1.2 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--mute); }
+.f { font-size: clamp(15px, 1.1vw, 19px); }
+.verdict { font-size: clamp(14px, 1.05vw, 18px); color: var(--maroon); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--mute); }
+.legend[hidden] { display: none; }
+.sw { display: inline-block; width: 14px; height: 11px; margin-right: 6px; vertical-align: -1px; }
+.sw.mc { background: rgba(128, 0, 0, .28); border: 1.2px solid var(--maroon); }
+.sw.ex { height: 0; border-top: 2px dashed var(--ink); vertical-align: 3px; }
+svg { display: block; width: 100%; height: auto; overflow: visible; }
+
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.controls + .controls { margin-top: 10px; }
+button, select, input { font-family: var(--sans); color: var(--ink); }
+button { font-size: 15px; font-weight: 700; border: 1.5px solid var(--ink); border-radius: 8px; background: #fff; padding: 9px 14px; cursor: pointer; }
+button:hover { background: var(--panel); }
+button.primary { background: var(--maroon); border-color: var(--maroon); color: var(--reverse); }
+button.primary:hover { background: #660000; }
+button.on { background: var(--ink); color: #fff; }
+button.chip { font-size: 14px; padding: 6px 11px; border-width: 1.2px; }
+button.chip.on { background: var(--maroon); border-color: var(--maroon); color: var(--reverse); }
+select { font-size: 14px; border: 1.5px solid var(--ink); border-radius: 8px; background: #fff; padding: 8px 10px; }
+.speed, .knob { font-size: 14px; color: var(--mute); display: flex; align-items: center; gap: 8px; }
+.knob { color: var(--ink); font-size: 15px; margin-left: 10px; }
+.knob input[type=range] { width: min(240px, 34vw); accent-color: var(--maroon); }
+.knob output { font: 15px var(--mono); min-width: 4.5em; }
+kbd { font: 11px var(--mono); border: 1px solid currentColor; border-radius: 4px; padding: 1px 5px; margin-left: 7px; opacity: .75; }
+.count { margin-left: auto; font: 15px var(--mono); letter-spacing: .06em; color: var(--ink); }
+
+/* the plots */
+.grid { stroke: var(--hair); stroke-width: 1; }
+.axis { stroke: var(--ink); stroke-width: 1.3; }
+.tick { font-family: var(--mono); font-size: 12.5px; fill: var(--mute); }
+.lab { font-family: var(--sans); font-size: 15px; fill: var(--ink); }
+.lab.word { font-size: 14px; fill: var(--mute); }
+.target-fill { fill: var(--cream); }
+.target-line { fill: none; stroke: var(--ink); stroke-width: 2.4; stroke-linejoin: round; }
+.prop-fill { fill: var(--panel); }
+.prop-line { fill: none; stroke: var(--mute); stroke-width: 2.2; stroke-linejoin: round; }
+.rug { fill: var(--maroon); }
+.cur-line { stroke: var(--maroon); stroke-width: 1.8; stroke-dasharray: 5 4; }
+.cur-dot { fill: var(--maroon); stroke: #fff; stroke-width: 1.5; }
+.prop-mark { stroke: var(--ink); stroke-width: 1.8; stroke-dasharray: 2 3; }
+.prop-dot { fill: var(--ink); stroke: #fff; stroke-width: 1.5; }
+.height-c { stroke: var(--maroon); stroke-width: 1.2; stroke-dasharray: 3 3; }
+.height-p { stroke: var(--ink); stroke-width: 1.2; stroke-dasharray: 3 3; }
+.mc { fill: var(--maroon); fill-opacity: .28; stroke: var(--maroon); stroke-width: 1; }
+.ex-line { fill: none; stroke: var(--ink); stroke-width: 2; stroke-dasharray: 6 4; }
+.trace-line { fill: none; stroke: var(--ink); stroke-width: 1.5; stroke-linejoin: round; }
+.zero { stroke: var(--mute); stroke-width: 1; stroke-dasharray: 4 4; }
+.tag rect { fill: #fff; stroke: var(--maroon); stroke-width: 1.2; }
+.tag text { font-family: var(--sans); font-size: 15px; font-weight: 700; fill: var(--maroon); }
+.tag.ink rect { stroke: var(--ink); }
+.tag.ink text { fill: var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="chrome"><span><b>Bayesian Machine Learning</b> · Markov chain Monte Carlo</span><span>The Metropolis algorithm</span></header>
+  <h1>Metropolis on Two Humps</h1>
+  <p class="lede">The target <i>p</i>(<i>θ</i>) = ½ N(<i>θ</i>; −1, 0.5²) + ½ N(<i>θ</i>; 1, 0.5²) has two humps. We can compute <i>p</i>(<i>θ</i>) anywhere, but we can't sample from it.
+    Start somewhere; propose <i>θ</i><sub>p</sub> from <i>q</i>(<i>θ</i>; <i>θ</i><sub>c</sub>) = N(<i>θ</i><sub>c</sub>, <i>σ</i>²); move with probability
+    <i>p</i><sub>move</sub> = min(1, <i>p</i>(<i>θ</i><sub>p</sub>) / <i>p</i>(<i>θ</i><sub>c</sub>)), otherwise stay. Where the walk has been is the sample, and the width <i>σ</i> is the knob.</p>
+
+  <div class="banner" aria-live="polite">
+    <div class="where"><span id="where">Ready</span><span class="dots" id="dots"><i></i><i></i><i></i></span></div>
+    <div class="what" id="what"></div>
+  </div>
+
+  <div class="stage" id="stage" title="Click to take the next step">
+    <div class="row3">
+      <figure class="panel">
+        <figcaption><span class="kick">1 · Target</span><span class="f"><i>p</i>(<i>θ</i>), two humps</span></figcaption>
+        <svg id="p1" viewBox="0 0 460 260" role="img" aria-label="The two-humped target, with the current position of the walk"></svg>
+      </figure>
+      <figure class="panel">
+        <figcaption><span class="kick">2 · Proposal</span><span class="f" id="t2"></span></figcaption>
+        <svg id="p2" viewBox="0 0 460 260" role="img" aria-label="The Gaussian proposal around the current position, and the proposed point"></svg>
+      </figure>
+      <figure class="panel">
+        <figcaption><span class="kick">3 · Samples ≈ <i>p</i>(<i>θ</i>)</span><span class="f" id="t3"></span>
+          <span class="legend" id="leg" hidden><span><i class="sw mc"></i>Where the walk has been</span><span><i class="sw ex"></i>Target <i>p</i>(<i>θ</i>)</span></span>
+        </figcaption>
+        <svg id="p3" viewBox="0 0 460 260" role="img" aria-label="Histogram of the walk against the target"></svg>
+      </figure>
+    </div>
+    <figure class="panel trace">
+      <figcaption><span class="kick">4 · Trace of <i>θ</i><sub>c</sub>, the last 400 iterations</span><span class="verdict" id="verdict"></span></figcaption>
+      <svg id="p4" viewBox="0 0 1400 140" role="img" aria-label="The walk over the last 400 iterations"></svg>
+    </figure>
+  </div>
+
+  <div class="controls">
+    <button id="bStep" class="primary">Step<kbd>Space</kbd></button>
+    <button id="bAuto">Auto-run<kbd>A</kbd></button>
+    <label class="speed">Speed
+      <select id="speed">
+        <option value="300">Narrated, 0.3 s a step</option>
+        <option value="80">Brisk, 0.08 s a step</option>
+        <option value="fast">Fast, 250 a second</option>
+      </select>
+    </label>
+    <button id="b100">+100<kbd>F</kbd></button>
+    <button id="b5000">Run 5,000</button>
+    <button id="bReset">Reset<kbd>R</kbd></button>
+    <label class="knob">Proposal width <i>σ</i>
+      <input id="sigma" type="range" min="-1.3" max="1.3" step="0.01" value="0">
+      <output id="sigmaOut">1</output>
+    </label>
+    <button class="chip" data-s="0.1">0.1</button>
+    <button class="chip" data-s="1">1</button>
+    <button class="chip" data-s="10">10</button>
+    <span class="count" id="count">N = 0</span>
+  </div>
+
+  <footer class="chrome" style="margin-top:22px"><span>The University of Chicago</span><span>Space or → step · A auto-run · F +100 · R reset</span><span>MS-ADS</span></footer>
+  <noscript><p>This demo needs JavaScript.</p></noscript>
+</div>
+
+<script>
+"use strict";
+(() => {
+// ---------------------------------------------------------------------------
+// The target, and a normal sampler
+const SQ2PI = Math.sqrt(2 * Math.PI);
+const npdf = (x, m, s) => Math.exp(-0.5 * ((x - m) / s) ** 2) / (s * SQ2PI);
+const target = x => 0.5 * npdf(x, -1, 0.5) + 0.5 * npdf(x, 1, 0.5);
+function randn() { let u = 0; while (u === 0) u = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * Math.random()); }
+
+// ---------------------------------------------------------------------------
+// State: the walk, and what the panels show
+const LO = -4, HI = 4, BW = 0.2, NB = Math.round((HI - LO) / BW), TRACE = 400;
+const ST = { CURRENT: 0, PROPOSE: 1, DECIDE: 2 };
+let sigma = 1, xc, xp, flag, view, counts, N, nAcc, crossings, side, trace, rug, timer = null, until = Infinity;
+
+const $ = id => document.getElementById(id);
+const fmt = k => k.toLocaleString("en-US");
+const f2 = v => v.toFixed(2);
+const fp = v => (v >= 0.001 ? v.toFixed(3) : v.toExponential(1));       // a density, small ones in e-notation
+const fs = s => (s >= 10 ? s.toFixed(0) : s >= 1 ? String(+s.toFixed(1)) : String(+s.toPrecision(2)));
+const pct = r => `${Math.round(100 * r)}%`;
+const THC = "<i>θ</i><sub>c</sub>", THP = "<i>θ</i><sub>p</sub>", PM = "<i>p</i><sub>move</sub>";
+
+function say(where, what, dots) {
+  $("where").textContent = where;
+  $("what").innerHTML = what;
+  [...$("dots").children].forEach((d, i) => d.classList.toggle("on", i < dots));
+}
+
+function reset(message) {
+  stopAuto();
+  xc = Math.max(-3, Math.min(3, randn())); xp = null;
+  flag = ST.CURRENT;
+  counts = new Array(NB).fill(0); N = 0; nAcc = 0; crossings = 0; side = xc < 0 ? -1 : 1;
+  trace = []; rug = [];
+  view = { cur: null, center: null, xp: null, decide: null, fast: false };
+  say("Ready", `${message ? message + " " : ""}The walk starts at ${THC} = ${f2(xc)}. Click the panels, or press Space, to take one Metropolis step in three parts.`, 0);
+  render();
+}
+
+// One iteration: propose (unless given), accept or reject, record where the walk is
+function advance(given) {
+  const old = xc, prop = given ?? xc + sigma * randn();
+  const pc = target(old), pp = target(prop);
+  const pmove = Math.min(1, pp / Math.max(pc, 1e-300)), a = Math.random(), moved = a < pmove;
+  if (moved) { xc = prop; nAcc++; }
+  N++;
+  const b = Math.floor((xc - LO) / BW);
+  if (b >= 0 && b < NB) counts[b]++;
+  const s = xc < 0 ? -1 : 1;
+  if (s !== side) { crossings++; side = s; }
+  trace.push(xc); if (trace.length > TRACE) trace.shift();
+  rug.push(xc); if (rug.length > 800) rug.shift();
+  return { old, prop, pc, pp, pmove, a, moved };
+}
+
+// One click, one step: the three parts of an iteration, as in MetropolisHasting2.py
+function stepOnce() {
+  const it = `Iteration ${fmt(N + 1)}`;
+  if (flag === ST.CURRENT) {
+    view = { cur: xc, center: xc, xp: null, decide: null, fast: false };
+    say(`${it} · Step 1 of 3`, `The current position ${THC} = ${f2(xc)}, where <i>p</i>(${THC}) = ${fp(target(xc))}. The proposal is centred on it.`, 1);
+    flag = ST.PROPOSE;
+  } else if (flag === ST.PROPOSE) {
+    xp = xc + sigma * randn();
+    view.xp = xp;
+    say(`${it} · Step 2 of 3`, `Proposed ${THP} = ${f2(xp)} from <i>q</i>(<i>θ</i>; ${THC}) = N(${f2(xc)}, ${fs(sigma)}²), where <i>p</i>(${THP}) = ${fp(target(xp))}`, 2);
+    flag = ST.DECIDE;
+  } else {
+    const r = advance(xp);
+    xp = null;
+    view.decide = r;
+    const rule = `${PM} = min(1, ${fp(r.pp)} / ${fp(r.pc)}) = ${r.pmove.toFixed(3)}; <i>a</i> = ${r.a.toFixed(3)}`;
+    say(`${it} · Step 3 of 3`, r.moved
+      ? `<b class="mv">Moved.</b> ${rule} &lt; ${PM}, so take ${THP} = ${f2(r.prop)}`
+      : `<b class="st">Stayed.</b> ${rule} ≥ ${PM}, so keep ${THC} = ${f2(r.old)}`, 3);
+    flag = ST.CURRENT;
+  }
+  render();
+}
+
+// Many iterations at once; a step under way is finished first
+function finishPending() {
+  if (flag === ST.DECIDE) { advance(xp); xp = null; }
+  flag = ST.CURRENT;
+}
+function addIterations(m) {
+  finishPending();
+  let r = null;
+  for (let i = 0; i < m; i++) r = advance();
+  if (r) view = { cur: xc, center: r.old, xp: r.prop, decide: null, fast: true };
+  return r;
+}
+
+// Fast runs are paced by the clock, not by how often the timer fires: each tick does the
+// iterations that 250 a second calls for, so 5,000 take 20 s however slowly the screen redraws
+const RATE = 250;
+let fast = null, lastT = 0, owed = 0;
+function startAuto(limit) {
+  stopAuto();
+  const v = $("speed").value;
+  if (v === "fast" || limit) {
+    until = limit ? N + (flag === ST.DECIDE ? 1 : 0) + limit : Infinity;
+    lastT = performance.now(); owed = 1;
+    const tick = () => {
+      const t = performance.now();
+      owed += Math.min(t - lastT, 1000) * RATE / 1000;
+      lastT = t;
+      const k = Math.min(Math.floor(owed), until - N);
+      owed -= Math.floor(owed);
+      if (k > 0) addIterations(k);
+      if (N >= until) {
+        stopAuto();
+        say("Done", `Ran ${fmt(limit)} iterations with <i>σ</i> = ${fs(sigma)}: ${pct(nAcc / N)} accepted, ${fmt(crossings)} crossings between the humps. ${verdict()}`, 3);
+      } else {
+        say(limit ? `Running ${fmt(limit)} · fast` : "Auto-run · fast", `<i>N</i> = ${fmt(N)} iterations with <i>σ</i> = ${fs(sigma)}`, 3);
+      }
+      render();
+    };
+    fast = setInterval(tick, 40);
+    tick();
+  } else {
+    timer = setInterval(stepOnce, Number(v));
+  }
+  $("bAuto").classList.add("on");
+  $("bAuto").innerHTML = "Pause<kbd>A</kbd>";
+}
+function stopAuto() {
+  if (timer !== null) { clearInterval(timer); timer = null; }
+  if (fast !== null) { clearInterval(fast); fast = null; }
+  until = Infinity;
+  $("bAuto").classList.remove("on");
+  $("bAuto").innerHTML = "Auto-run<kbd>A</kbd>";
+}
+const running = () => timer !== null || fast !== null;
+const toggleAuto = () => (running() ? stopAuto() : startAuto());
+
+// Rules of thumb for the knob; the acceptance rate alone can mislead, so the trace is drawn too
+function verdict() {
+  if (N < 200) return "";
+  const r = nAcc / N;
+  if (r > 0.8) return `Too narrow: almost every proposal is accepted, but each step is tiny, so the walk crawls and stays in one hump for long stretches.`;
+  if (r < 0.2) return `Too wide: most proposals land where p(θ) is tiny and are rejected, so the walk stands still for long stretches.`;
+  return `A workable width: the walk moves often and crosses between the humps.`;
+}
+
+// ---------------------------------------------------------------------------
+// Plotting, in SVG
+const SVGNS = "http://www.w3.org/2000/svg";
+const M = { l: 62, r: 12, t: 12, b: 46 };
+function el(tag, attrs, parent, text) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text !== undefined) e.textContent = text;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function rich(t, parts) {                // [text, italic, subscript] runs inside one <text>
+  let low = false;
+  for (const [s, it, sub] of parts) {
+    const a = {};
+    if (it) a["font-style"] = "italic";
+    if (sub && !low) { a.dy = 4; a["font-size"] = "0.75em"; low = true; }
+    else if (!sub && low) { a.dy = -4; low = false; }
+    el("tspan", a, t, s);
+  }
+  return t;
+}
+function niceStep(raw) {
+  const p = 10 ** Math.floor(Math.log10(raw));
+  for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= raw - 1e-12) return m * p;
+}
+function yScale(peak) {
+  const top = Math.max(peak, 1e-6) * 1.22, step = niceStep(top / 5);
+  const ymax = Math.ceil(top / step - 1e-9) * step, yt = [];
+  for (let v = 0; v <= ymax + step / 2; v += step) yt.push(+v.toFixed(10));
+  const s = String(+step.toPrecision(6));
+  return { ymin: 0, ymax, yt, dec: s.includes(".") ? s.split(".")[1].length : 0 };
+}
+
+function frame(svg, o) {
+  svg.replaceChildren();
+  const [W, H] = svg.getAttribute("viewBox").split(" ").slice(2).map(Number);
+  const x0 = M.l, x1 = W - M.r, y0 = H - M.b, y1 = M.t;
+  const sx = v => x0 + (v - o.xmin) / (o.xmax - o.xmin) * (x1 - x0);
+  const sy = v => y0 - (v - o.ys.ymin) / (o.ys.ymax - o.ys.ymin) * (y0 - y1);
+  const id = `${svg.id}-clip`;
+  el("rect", { x: x0, y: y1, width: x1 - x0, height: y0 - y1 }, el("clipPath", { id }, el("defs", {}, svg)));
+  const g = el("g", {}, svg);
+  for (const t of o.ys.yt) {
+    el("line", { x1: x0, x2: x1, y1: sy(t), y2: sy(t), class: "grid" }, g);
+    el("text", { x: x0 - 8, y: sy(t) + 4, class: "tick", "text-anchor": "end" }, g, t.toFixed(o.ys.dec));
+  }
+  for (const t of o.xticks) el("text", { x: sx(t), y: y0 + 18, class: "tick", "text-anchor": "middle" }, g, o.xfmt(t));
+  el("line", { x1: x0, x2: x1, y1: y0, y2: y0, class: "axis" }, g);
+  rich(el("text", { x: (x0 + x1) / 2, y: H - 6, class: "lab", "text-anchor": "middle" }, g), o.xlabel);
+  const ym = (y0 + y1) / 2;
+  rich(el("text", { x: 12, y: ym, class: "lab word", "text-anchor": "middle", transform: `rotate(-90 12 ${ym})` }, g), o.ylabel);
+  const plot = el("g", { "clip-path": `url(#${id})` }, g);
+  return { sx, sy, g, plot, x0, x1, y0, y1 };
+}
+function tag(f, x, y, parts, cls) {      // a boxed label, kept inside the plot
+  const g = el("g", { class: cls ? `tag ${cls}` : "tag" }, f.g);
+  const t = rich(el("text", { x: 0, y, "text-anchor": "middle" }, g), parts);
+  const w = t.getBBox().width;
+  t.setAttribute("x", Math.min(f.x1 - w / 2 - 8, Math.max(f.x0 + w / 2 + 8, x)));
+  const bb = t.getBBox();
+  g.insertBefore(el("rect", { x: bb.x - 7, y: bb.y - 3, width: bb.width + 14, height: bb.height + 6, rx: 5 }), t);
+  return bb.y + bb.height + 3;          // the bottom of the box
+}
+const curve = (f, fn, n = 320) => Array.from({ length: n + 1 }, (_, i) => {
+  const x = LO + (HI - LO) * i / n;
+  return `${f.sx(x).toFixed(1)},${f.sy(fn(x)).toFixed(1)}`;
+});
+const XT = [-4, -3, -2, -1, 0, 1, 2, 3, 4], XL = [["θ", true]];
+const vline = (f, x, cls, top) => el("line", { x1: f.sx(x), x2: f.sx(x), y1: top ?? f.y1, y2: f.y0, class: cls }, f.g);
+
+function drawTarget() {
+  const f = frame($("p1"), { xmin: LO, xmax: HI, ys: yScale(0.4), xticks: XT, xfmt: String, xlabel: XL, ylabel: [["density"]] });
+  const pts = curve(f, target);
+  el("path", { d: `M${f.sx(LO)},${f.y0} L${pts.join(" L")} L${f.sx(HI)},${f.y0} Z`, class: "target-fill" }, f.plot);
+  el("polyline", { points: pts.join(" "), class: "target-line" }, f.plot);
+  if (rug.length) {
+    let d = "";                          // one path of dots: cheaper to paint than 800 circles
+    for (const x of rug) if (x > LO && x < HI) d += `M${(f.sx(x) - 3.2).toFixed(1)},${f.y0}a3.2,3.2 0 1,0 6.4,0a3.2,3.2 0 1,0 -6.4,0`;
+    el("path", { d, class: "rug", "fill-opacity": Math.min(0.22, Math.max(0.03, 10 / rug.length)) }, f.g);
+  }
+  if (view.cur === null) return;
+  const d = view.decide, show = !view.fast && view.xp !== null && view.xp > LO && view.xp < HI;
+  if (show) {                            // the proposal, and on the decision the two heights
+    vline(f, view.xp, "prop-mark");
+    el("circle", { cx: f.sx(view.xp), cy: f.y0, r: 6, class: "prop-dot" }, f.g);
+  }
+  if (d) {
+    for (const [x, cls, dot] of [[d.old, "height-c", "cur-dot"], [d.prop, "height-p", "prop-dot"]]) {
+      if (x <= LO || x >= HI) continue;
+      const Y = f.sy(target(x));
+      el("line", { x1: f.x0, x2: f.sx(x), y1: Y, y2: Y, class: cls }, f.g);
+      el("circle", { cx: f.sx(x), cy: Y, r: 5.5, class: dot }, f.g);
+    }
+  }
+  const X = f.sx(view.cur);
+  const bottom = tag(f, X, f.y1 + 18, [["θ", true], ["c", false, true], [` = ${f2(view.cur)}`]]);
+  vline(f, view.cur, "cur-line", bottom);
+  el("circle", { cx: X, cy: f.y0, r: 6.5, class: "cur-dot" }, f.g);
+}
+
+function drawProposal() {
+  const c = view.center;
+  $("t2").innerHTML = c === null ? `<i>q</i>(<i>θ</i>; ${THC}) = N(${THC}, ${fs(sigma)}²)` : `<i>q</i>(<i>θ</i>; ${THC}) = N(${f2(c)}, ${fs(sigma)}²)`;
+  const peak = 1 / (sigma * SQ2PI);
+  const f = frame($("p2"), { xmin: LO, xmax: HI, ys: yScale(peak), xticks: XT, xfmt: String, xlabel: XL, ylabel: [["density"]] });
+  if (c === null) return;
+  const q = x => npdf(x, c, sigma);
+  const pts = curve(f, q, sigma < 0.3 ? 1600 : 320);
+  el("path", { d: `M${f.sx(LO)},${f.y0} L${pts.join(" L")} L${f.sx(HI)},${f.y0} Z`, class: "prop-fill" }, f.plot);
+  el("polyline", { points: pts.join(" "), class: "prop-line" }, f.plot);
+  vline(f, c, "cur-line");
+  el("circle", { cx: f.sx(c), cy: f.y0, r: 6.5, class: "cur-dot" }, f.g);
+  if (view.xp !== null) {
+    const X = f.sx(Math.max(LO, Math.min(HI, view.xp)));
+    const bottom = tag(f, X, f.y1 + 18, [["θ", true], ["p", false, true], [` = ${f2(view.xp)}`]], "ink");
+    el("line", { x1: X, x2: X, y1: bottom, y2: f.y0, class: "prop-mark" }, f.g);
+    el("circle", { cx: X, cy: f.y0, r: 6, class: "prop-dot" }, f.g);
+  }
+}
+
+function drawSamples() {
+  $("leg").hidden = N === 0;
+  $("t3").innerHTML = N === 0 ? "No samples yet"
+    : `<i>N</i> = ${fmt(N)} · accepted ${pct(nAcc / N)} · ${fmt(crossings)} ${crossings === 1 ? "crossing" : "crossings"} between the humps`;
+  const dens = counts.map(c => (N ? c / (N * BW) : 0));
+  const f = frame($("p3"), { xmin: LO, xmax: HI, ys: yScale(Math.max(0.4, ...dens)), xticks: XT, xfmt: String, xlabel: XL, ylabel: [["density"]] });
+  if (N === 0) return;
+  dens.forEach((d, b) => { if (d > 0) {
+    const xa = f.sx(LO + b * BW), xb = f.sx(LO + (b + 1) * BW);
+    el("rect", { x: xa + 0.5, y: f.sy(d), width: Math.max(0, xb - xa - 1), height: f.y0 - f.sy(d), class: "mc" }, f.plot);
+  } });
+  el("polyline", { points: curve(f, target).join(" "), class: "ex-line" }, f.plot);
+}
+
+function drawTrace() {
+  $("verdict").textContent = verdict();
+  const first = N - trace.length + 1;
+  const xmin = Math.max(1, first) - 0.5, xmax = xmin + TRACE;
+  const step = niceStep(TRACE / 6), xticks = [];
+  for (let k = Math.ceil(xmin / step) * step; k <= xmax; k += step) if (k >= 1) xticks.push(k);
+  const f = frame($("p4"), { xmin, xmax, ys: { ymin: -3.5, ymax: 3.5, yt: [-2, 0, 2], dec: 0 }, xticks,
+    xfmt: fmt, xlabel: [["iteration"]], ylabel: [["θ", true], ["c", false, true]] });
+  el("line", { x1: f.x0, x2: f.x1, y1: f.sy(0), y2: f.sy(0), class: "zero" }, f.g);
+  if (!trace.length) return;
+  el("polyline", { points: trace.map((x, i) => `${f.sx(first + i).toFixed(1)},${f.sy(x).toFixed(1)}`).join(" "), class: "trace-line" }, f.plot);
+  el("circle", { cx: f.sx(N), cy: f.sy(Math.max(-3.5, Math.min(3.5, xc))), r: 5, class: "cur-dot" }, f.g);
+}
+
+function render() {
+  drawTarget(); drawProposal(); drawSamples(); drawTrace();
+  $("count").textContent = `N = ${fmt(N)}`;
+}
+
+// ---------------------------------------------------------------------------
+// Controls: the buttons, the knob, a click on the panels, the keyboard (and a presenter's clicker)
+function setSigma(s, fromSlider) {
+  sigma = s;
+  $("sigmaOut").textContent = fs(s);
+  if (!fromSlider) $("sigma").value = Math.log10(s).toFixed(2);
+  document.querySelectorAll(".chip").forEach(b => b.classList.toggle("on", Math.abs(+b.dataset.s - s) < 1e-9));
+  reset(`Proposal width σ = ${fs(s)}.`);
+}
+$("sigma").addEventListener("input", e => setSigma(+(10 ** +e.currentTarget.value).toPrecision(3), true));
+document.querySelectorAll(".chip").forEach(b => b.addEventListener("click", e => { e.currentTarget.blur(); setSigma(+b.dataset.s); }));
+
+const tap = (id, fn) => $(id).addEventListener("click", e => { e.currentTarget.blur(); fn(); });
+tap("bStep", () => { stopAuto(); stepOnce(); });
+tap("bAuto", toggleAuto);
+tap("b100", () => {
+  stopAuto(); addIterations(100);
+  say("100 at once", `<i>N</i> = ${fmt(N)} iterations with <i>σ</i> = ${fs(sigma)}`, 3); render();
+});
+tap("b5000", () => startAuto(5000));
+tap("bReset", () => reset());
+$("stage").addEventListener("click", () => { stopAuto(); stepOnce(); });
+$("speed").addEventListener("change", e => { e.currentTarget.blur(); if (running() && until === Infinity) startAuto(); });
+
+document.addEventListener("keydown", e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const t = e.target instanceof Element ? e.target : null;
+  if (t && t.closest("input, select, textarea")) return;
+  const k = e.key;
+  if (k === " " || k === "Enter" || k === "ArrowRight" || k === "PageDown") {
+    if (t && t.closest("button")) return;   // let a focused button act
+    e.preventDefault(); stopAuto(); stepOnce();
+  } else if (k === "a" || k === "A") { toggleAuto(); }
+  else if (k === "f" || k === "F") { $("b100").click(); }
+  else if (k === "r" || k === "R") { reset(); }
+});
+
+setSigma(1);
+})();
+</script>
+</body>
+</html>
