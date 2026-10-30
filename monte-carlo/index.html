@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monte Carlo: Back to Our Evil World · Bayesian Machine Learning</title>
+<meta name="description" content="Monte Carlo for the posterior predictive: draw θ from the posterior Beta(3, 9), then the next 10 days from Bin(10, θ); again, and again.">
+<style>
+@font-face { font-family: "Chivo"; src: url("../fonts/Chivo-Regular.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Chivo"; src: url("../fonts/Chivo-Italic.ttf") format("truetype"); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: "Chivo"; src: url("../fonts/Chivo-Bold.ttf") format("truetype"); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "Chivo"; src: url("../fonts/Chivo-Black.ttf") format("truetype"); font-weight: 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "Chivo Mono"; src: url("../fonts/ChivoMono-Regular.ttf") format("truetype"); font-weight: 400; font-style: normal; font-display: swap; }
+
+/* The Chivo Grid colours of the course slides */
+:root {
+  --ink: #101014; --maroon: #800000; --cream: #F3E7D3; --mute: #6A6A72;
+  --hair: #DCDCE0; --panel: #F4F4F6; --reverse: #F8F4EF;
+  --sans: "Chivo", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --mono: "Chivo Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: #fff; color: var(--ink); font-family: var(--sans); }
+.wrap { max-width: 1680px; margin: 0 auto; padding: clamp(14px, 2.2vw, 36px) clamp(16px, 3vw, 56px) 20px; }
+
+.chrome { display: flex; justify-content: space-between; gap: 16px; border-top: 2px solid var(--ink); padding-top: 9px;
+  font: 12px/1.3 var(--mono); letter-spacing: .18em; text-transform: uppercase; color: var(--mute); }
+.chrome b { color: var(--ink); font-weight: 400; }
+h1 { font: 900 clamp(28px, 3.2vw, 52px)/1.05 var(--sans); margin: .32em 0 .22em; letter-spacing: -.01em; }
+.lede { font-size: clamp(15px, 1.2vw, 20px); line-height: 1.45; margin: 0 0 14px; max-width: 72em; }
+
+.banner { display: flex; align-items: center; gap: clamp(14px, 2vw, 32px); background: var(--cream); border-radius: 10px;
+  padding: 12px 20px; min-height: 66px; }
+.where { display: flex; flex-direction: column; gap: 7px; flex: none; min-width: 13.5em;
+  font: 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--maroon); }
+.dots i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--maroon); margin-right: 6px; }
+.dots i.on { background: var(--maroon); }
+.what { font-size: clamp(16px, 1.35vw, 22px); line-height: 1.35; }
+
+.stage { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(12px, 1.5vw, 26px); margin: 16px 0;
+  cursor: pointer; user-select: none; -webkit-user-select: none; }
+@media (max-width: 960px) { .stage { grid-template-columns: 1fr; } .where { min-width: 0; } }
+.panel { margin: 0; border: 1px solid var(--hair); border-radius: 10px; padding: 12px 12px 4px; background: #fff; }
+.panel figcaption { display: flex; flex-direction: column; gap: 5px; min-height: 4.6em; }
+.kick { font: 11px/1.2 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--mute); }
+.f { font-size: clamp(15px, 1.15vw, 20px); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--mute); }
+.legend[hidden] { display: none; }
+.sw { display: inline-block; width: 14px; height: 11px; margin-right: 6px; vertical-align: -1px; }
+.sw.mc { background: rgba(128, 0, 0, .28); border: 1.2px solid var(--maroon); }
+.sw.ex { height: 0; border-top: 2px dashed var(--ink); vertical-align: 3px; }
+svg { display: block; width: 100%; height: auto; overflow: visible; }
+
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+button, select, input { font-family: var(--sans); color: var(--ink); }
+button { font-size: 15px; font-weight: 700; border: 1.5px solid var(--ink); border-radius: 8px; background: #fff; padding: 9px 14px; cursor: pointer; }
+button:hover { background: var(--panel); }
+button.primary { background: var(--maroon); border-color: var(--maroon); color: var(--reverse); }
+button.primary:hover { background: #660000; }
+button.on { background: var(--ink); color: #fff; }
+select { font-size: 14px; border: 1.5px solid var(--ink); border-radius: 8px; background: #fff; padding: 8px 10px; }
+.speed { font-size: 14px; color: var(--mute); display: flex; align-items: center; gap: 8px; }
+kbd { font: 11px var(--mono); border: 1px solid currentColor; border-radius: 4px; padding: 1px 5px; margin-left: 7px; opacity: .75; }
+.count { margin-left: auto; font: 15px var(--mono); letter-spacing: .06em; color: var(--ink); }
+
+details { margin: 18px 0 14px; font-size: 15px; }
+summary { cursor: pointer; font-weight: 700; }
+form { display: flex; flex-wrap: wrap; align-items: end; gap: 12px 18px; margin-top: 12px; padding: 14px 16px; background: var(--panel); border-radius: 10px; }
+form label { display: flex; flex-direction: column; gap: 5px; font-size: 14px; color: var(--mute); }
+form input { width: 7em; font-size: 15px; padding: 6px 8px; border: 1px solid #b8b8c0; border-radius: 6px; }
+form button { font-size: 14px; padding: 7px 12px; }
+
+/* the plots */
+.grid { stroke: var(--hair); stroke-width: 1; }
+.axis { stroke: var(--ink); stroke-width: 1.3; }
+.tick { font-family: var(--mono); font-size: 12.5px; fill: var(--mute); }
+.lab { font-family: var(--sans); font-size: 15px; fill: var(--ink); }
+.lab.word { font-size: 14px; fill: var(--mute); }
+.post-fill { fill: var(--cream); }
+.post-line { fill: none; stroke: var(--ink); stroke-width: 2.4; stroke-linejoin: round; }
+.rug circle { fill: var(--maroon); }
+.cur-line { stroke: var(--maroon); stroke-width: 1.8; stroke-dasharray: 5 4; }
+.cur-dot { fill: var(--maroon); stroke: #fff; stroke-width: 1.5; }
+.bar { fill: #BDBDC4; }
+.bar.hit { fill: var(--maroon); }
+.mc { fill: var(--maroon); fill-opacity: .28; stroke: var(--maroon); stroke-width: 1.2; }
+.ex-line { fill: none; stroke: var(--ink); stroke-width: 2; stroke-dasharray: 6 4; }
+.ex-dot { fill: var(--ink); }
+.tag rect { fill: #fff; stroke: var(--maroon); stroke-width: 1.2; }
+.tag text { font-family: var(--sans); font-size: 15px; font-weight: 700; fill: var(--maroon); }
+.leader { stroke: var(--maroon); stroke-width: 1.2; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="chrome"><span><b>Bayesian Machine Learning</b> · Monte Carlo</span><span>The posterior predictive</span></header>
+  <h1>Back to Our Evil World</h1>
+  <p class="lede" id="lede"></p>
+
+  <div class="banner" aria-live="polite">
+    <div class="where"><span id="where">Ready</span><span class="dots" id="dots"><i></i><i></i><i></i><i></i><i></i></span></div>
+    <div class="what" id="what"></div>
+  </div>
+
+  <div class="stage" id="stage" title="Click to take the next step">
+    <figure class="panel">
+      <figcaption><span class="kick" id="k1">1 · Prior</span><span class="f" id="t1"></span></figcaption>
+      <svg id="p1" viewBox="0 0 460 320" role="img" aria-label="The posterior of theta, with the draws so far"></svg>
+    </figure>
+    <figure class="panel">
+      <figcaption><span class="kick" id="k2">2 · Likelihood</span><span class="f" id="t2"></span></figcaption>
+      <svg id="p2" viewBox="0 0 460 320" role="img" aria-label="The binomial likelihood of the next days, given the drawn theta"></svg>
+    </figure>
+    <figure class="panel">
+      <figcaption><span class="kick">3 · Posterior predictive</span><span class="f"><i>p</i>(<i>x</i> | data)</span>
+        <span class="legend" id="leg" hidden><span><i class="sw mc"></i>Monte Carlo, <span id="legN"></span></span><span><i class="sw ex"></i>Exact: the beta-binomial</span></span>
+      </figcaption>
+      <svg id="p3" viewBox="0 0 460 320" role="img" aria-label="Histogram of the drawn x against the exact posterior predictive"></svg>
+    </figure>
+  </div>
+
+  <div class="controls">
+    <button id="bStep" class="primary">Step<kbd>Space</kbd></button>
+    <button id="bAuto">Auto-run<kbd>A</kbd></button>
+    <label class="speed">Speed
+      <select id="speed">
+        <option value="400">Narrated: 0.4 s a step</option>
+        <option value="100">Brisk: 0.1 s a step</option>
+        <option value="fast">Fast: 50 draws a second</option>
+      </select>
+    </label>
+    <button id="b100">+100 draws<kbd>F</kbd></button>
+    <button id="b1000">+1,000 draws</button>
+    <button id="bReset">Reset<kbd>R</kbd></button>
+    <span class="count" id="count">N = 0</span>
+  </div>
+
+  <details>
+    <summary>Change the numbers</summary>
+    <form id="form" autocomplete="off">
+      <label><span>Prior <i>a</i></span><input name="a0" type="number" min="0.1" max="100" step="0.1"></label>
+      <label><span>Prior <i>b</i></span><input name="b0" type="number" min="0.1" max="100" step="0.1"></label>
+      <label><span>Days so far</span><input name="days" type="number" min="0" max="365" step="1"></label>
+      <label><span>Evil people met</span><input name="evil" type="number" min="0" max="365" step="1"></label>
+      <label><span>Next days, <i>n</i></span><input name="n" type="number" min="1" max="40" step="1"></label>
+      <button type="submit">Apply and reset</button>
+      <button type="button" id="bClass">Back to the class numbers</button>
+    </form>
+  </details>
+
+  <footer class="chrome"><span>The University of Chicago</span><span>Space or → step · A auto-run · F +100 · R reset</span><span>MS-ADS</span></footer>
+  <noscript><p>This demo needs JavaScript.</p></noscript>
+</div>
+
+<script>
+"use strict";
+(() => {
+// ---------------------------------------------------------------------------
+// Distributions
+const LZ = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313,
+  -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
+function lgamma(z) {                    // Lanczos, g = 7
+  if (z < 0.5) return Math.log(Math.PI / Math.abs(Math.sin(Math.PI * z))) - lgamma(1 - z);
+  z -= 1;
+  let s = LZ[0];
+  for (let i = 1; i < 9; i++) s += LZ[i] / (z + i);
+  const t = z + 7.5;
+  return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(s);
+}
+const lbeta = (a, b) => lgamma(a) + lgamma(b) - lgamma(a + b);
+const lchoose = (n, k) => lgamma(n + 1) - lgamma(k + 1) - lgamma(n - k + 1);
+function betaPdf(x, a, b) {
+  if (x <= 0 || x >= 1) return 0;
+  return Math.exp((a - 1) * Math.log(x) + (b - 1) * Math.log1p(-x) - lbeta(a, b));
+}
+function binomPmf(k, n, p) {
+  if (p <= 0) return k === 0 ? 1 : 0;
+  if (p >= 1) return k === n ? 1 : 0;
+  return Math.exp(lchoose(n, k) + k * Math.log(p) + (n - k) * Math.log1p(-p));
+}
+const betaBinomPmf = (k, n, a, b) => Math.exp(lchoose(n, k) + lbeta(k + a, n - k + b) - lbeta(a, b));
+
+function randn() { let u = 0; while (u === 0) u = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * Math.random()); }
+function randGamma(k) {                 // Marsaglia and Tsang (2000)
+  if (k < 1) return randGamma(k + 1) * Math.pow(Math.random(), 1 / k);
+  const d = k - 1 / 3, c = 1 / Math.sqrt(9 * d);
+  for (;;) {
+    let x, v;
+    do { x = randn(); v = 1 + c * x; } while (v <= 0);
+    v = v * v * v;
+    const u = Math.random();
+    if (u < 1 - 0.0331 * x ** 4 || Math.log(u) < 0.5 * x * x + d * (1 - v + Math.log(v))) return d * v;
+  }
+}
+function randBeta(a, b) { const x = randGamma(a); return x / (x + randGamma(b)); }
+function randBinom(n, p) { let k = 0; for (let i = 0; i < n; i++) if (Math.random() < p) k++; return k; }
+
+// ---------------------------------------------------------------------------
+// State: the numbers of the slide, the posterior they give, and the draws so far
+const CLASS = { a0: 1, b0: 1, days: 10, evil: 2, n: 10 };
+let S = { ...CLASS };
+let A, B, n, exact;                     // posterior Beta(A, B); next n days; beta-binomial pmf
+let flag, cur, view, counts, N, thetas, timer = null;
+const STEP = { POSTERIOR: 0, THETA: 1, LIKELIHOOD: 2, X: 3, HIST: 4 };
+
+const $ = id => document.getElementById(id);
+const num = v => Number.isInteger(v) ? String(v) : String(+v.toFixed(2));
+const two = v => v.toFixed(2);
+const many = (k, one, more) => `${k.toLocaleString("en-US")} ${k === 1 ? one : more}`;
+const people = k => k === 1 ? "one evil person" : `${k} evil people`;
+const TH = "<i>θ</i>", THI = "<i>θ</i><sub>i</sub>";
+
+function say(where, what, dots) {
+  $("where").textContent = where;
+  $("what").innerHTML = what;
+  [...$("dots").children].forEach((d, i) => d.classList.toggle("on", i < dots));
+}
+
+function writeLede() {
+  $("lede").innerHTML = `Prior Beta(${num(S.a0)}, ${num(S.b0)}). On your first ${many(S.days, "day", "days")}, you meet ${people(S.evil)}, ` +
+    `so the posterior is Beta(${num(A)}, ${num(B)}). How many evil people will you meet in the next ${many(n, "day", "days")}? ` +
+    `Draw ${TH} from the posterior, then the next ${many(n, "day", "days")} from Bin(${n}, ${TH}); again, and again.`;
+}
+
+function reset(message) {
+  stopAuto();
+  A = S.a0 + S.evil; B = S.b0 + S.days - S.evil; n = S.n;
+  exact = Array.from({ length: n + 1 }, (_, k) => betaBinomPmf(k, n, A, B));
+  counts = new Array(n + 1).fill(0); N = 0; thetas = [];
+  flag = STEP.POSTERIOR; cur = { theta: null, x: null };
+  view = { post: false, theta: null, like: null, hist: false };
+  writeLede();
+  say("Ready", message || "Click the panels, or press Space, to take one draw in five steps.", 0);
+  render();
+}
+
+// One click, one step: the five steps of a draw, as in MonteCarloSimulation.py
+function stepOnce() {
+  const it = `Iteration ${(N + 1).toLocaleString("en-US")}`;
+  switch (flag) {
+    case STEP.POSTERIOR:
+      cur = { theta: null, x: null };
+      view.post = true; view.theta = null;
+      say(`${it} · Step 1 of 5`, `The posterior <i>p</i>(${TH} | data) = Beta(${num(A)}, ${num(B)})`, 1);
+      flag = STEP.THETA; break;
+    case STEP.THETA:
+      cur.theta = randBeta(A, B); thetas.push(cur.theta);
+      view.theta = cur.theta;
+      say(`${it} · Step 2 of 5`, `Sampled ${THI} = ${two(cur.theta)} from Beta(${num(A)}, ${num(B)})`, 2);
+      flag = STEP.LIKELIHOOD; break;
+    case STEP.LIKELIHOOD:
+      view.like = { theta: cur.theta, x: null };
+      say(`${it} · Step 3 of 5`, `The next ${many(n, "day", "days")}, if ${THI} = ${two(cur.theta)}: <i>p</i>(<i>x</i> | ${THI}) = Bin(${n}, ${two(cur.theta)})`, 3);
+      flag = STEP.X; break;
+    case STEP.X:
+      cur.x = randBinom(n, cur.theta);
+      view.like.x = cur.x;
+      say(`${it} · Step 4 of 5`, `Sampled <i>x</i> = ${cur.x}: ${people(cur.x)} in the next ${many(n, "day", "days")}`, 4);
+      flag = STEP.HIST; break;
+    case STEP.HIST:
+      counts[cur.x]++; N++;
+      view.hist = true;
+      say(`${it} · Step 5 of 5`, `Added <i>x</i> = ${cur.x} to the histogram: a Monte Carlo estimate from <i>N</i> = ${many(N, "draw", "draws")}`, 5);
+      flag = STEP.POSTERIOR; break;
+  }
+  render();
+}
+
+// Many draws at once; a draw under way is finished first
+function addDraws(m, where, what) {
+  let done = 0;
+  if (flag === STEP.LIKELIHOOD || flag === STEP.X || flag === STEP.HIST) {
+    if (cur.x === null) cur.x = randBinom(n, cur.theta);
+    counts[cur.x]++; N++; done++;
+  }
+  for (; done < m; done++) {
+    const theta = randBeta(A, B), x = randBinom(n, theta);
+    thetas.push(theta); counts[x]++; N++;
+    cur = { theta, x };
+  }
+  if (thetas.length > 4000) thetas.splice(0, thetas.length - 4000);
+  flag = STEP.POSTERIOR;
+  view = { post: true, theta: cur.theta, like: { theta: cur.theta, x: cur.x }, hist: true };
+  say(where || `${many(m, "draw", "draws")} at once`,
+      what || `The histogram now holds <i>N</i> = ${many(N, "draw", "draws")}`, 5);
+  render();
+}
+
+function startAuto() {
+  stopAuto();
+  const v = $("speed").value;
+  timer = v === "fast"
+    ? setInterval(() => addDraws(2, "Auto-run · fast", `Drawing 50 a second: <i>N</i> = ${many(N + 2, "draw", "draws")}`), 40)
+    : setInterval(stepOnce, Number(v));
+  $("bAuto").classList.add("on");
+  $("bAuto").innerHTML = "Pause<kbd>A</kbd>";
+}
+function stopAuto() {
+  if (timer !== null) { clearInterval(timer); timer = null; }
+  $("bAuto").classList.remove("on");
+  $("bAuto").innerHTML = "Auto-run<kbd>A</kbd>";
+}
+const toggleAuto = () => (timer === null ? startAuto() : stopAuto());
+
+// ---------------------------------------------------------------------------
+// Plotting, in SVG
+const SVGNS = "http://www.w3.org/2000/svg";
+const W = 460, H = 320, M = { l: 62, r: 12, t: 12, b: 46 };
+function el(tag, attrs, parent, text) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text !== undefined) e.textContent = text;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function rich(t, parts) {                // [text, italic, subscript] runs inside one <text>
+  let low = false;
+  for (const [s, it, sub] of parts) {
+    const a = {};
+    if (it) a["font-style"] = "italic";
+    if (sub && !low) { a.dy = 4; a["font-size"] = "0.75em"; low = true; }
+    else if (!sub && low) { a.dy = -4; low = false; }
+    el("tspan", a, t, s);
+  }
+  return t;
+}
+function niceStep(raw) {
+  const p = 10 ** Math.floor(Math.log10(raw));
+  for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= raw - 1e-12) return m * p;
+}
+function yScale(peak) {
+  const top = Math.max(peak, 1e-6) * 1.22, step = niceStep(top / 5);
+  const ymax = Math.ceil(top / step - 1e-9) * step, yt = [];
+  for (let v = 0; v <= ymax + step / 2; v += step) yt.push(+v.toFixed(10));
+  const s = String(+step.toPrecision(6));
+  return { ymax, yt, dec: s.includes(".") ? s.split(".")[1].length : 0 };
+}
+const intTicks = n => { const s = n <= 12 ? 1 : n <= 24 ? 2 : 5, t = []; for (let k = 0; k <= n; k += s) t.push(k); return t; };
+
+function frame(svg, o) {
+  svg.replaceChildren();
+  const x0 = M.l, x1 = W - M.r, y0 = H - M.b, y1 = M.t;
+  const sx = v => x0 + (v - o.xmin) / (o.xmax - o.xmin) * (x1 - x0);
+  const sy = v => y0 - v / o.ys.ymax * (y0 - y1);
+  const id = `${svg.id}-clip`;
+  el("rect", { x: x0, y: y1, width: x1 - x0, height: y0 - y1 }, el("clipPath", { id }, el("defs", {}, svg)));
+  const g = el("g", {}, svg);
+  for (const t of o.ys.yt) {
+    el("line", { x1: x0, x2: x1, y1: sy(t), y2: sy(t), class: "grid" }, g);
+    el("text", { x: x0 - 8, y: sy(t) + 4, class: "tick", "text-anchor": "end" }, g, t.toFixed(o.ys.dec));
+  }
+  for (const t of o.xticks) el("text", { x: sx(t), y: y0 + 18, class: "tick", "text-anchor": "middle" }, g, o.xfmt(t));
+  el("line", { x1: x0, x2: x1, y1: y0, y2: y0, class: "axis" }, g);
+  rich(el("text", { x: (x0 + x1) / 2, y: H - 6, class: "lab", "text-anchor": "middle" }, g), o.xlabel);
+  const ym = (y0 + y1) / 2;
+  el("text", { x: 12, y: ym, class: "lab word", "text-anchor": "middle", transform: `rotate(-90 12 ${ym})` }, g, o.ylabel);
+  const plot = el("g", { "clip-path": `url(#${id})` }, g);
+  return { sx, sy, g, plot, x0, x1, y0, y1 };
+}
+function tag(f, x, y, parts) {           // a boxed label, kept inside the plot
+  const g = el("g", { class: "tag" }, f.g);
+  const t = rich(el("text", { x: 0, y, "text-anchor": "middle" }, g), parts);
+  const w = t.getBBox().width;
+  const cx = Math.min(f.x1 - w / 2 - 8, Math.max(f.x0 + w / 2 + 8, x));
+  t.setAttribute("x", cx);
+  const bb = t.getBBox();
+  g.insertBefore(el("rect", { x: bb.x - 7, y: bb.y - 3, width: bb.width + 14, height: bb.height + 6, rx: 5 }), t);
+  return bb.y + bb.height + 3;          // the bottom of the box
+}
+const xLabel = () => [["x", true], [`, evil people in the next ${many(n, "day", "days")}`]];
+
+const GRID = Array.from({ length: 401 }, (_, i) => 0.0025 + 0.995 * i / 400);
+function drawPosterior() {
+  const a = view.post ? A : S.a0, b = view.post ? B : S.b0;
+  $("k1").textContent = view.post ? "1 · Posterior" : "1 · Prior";
+  $("t1").innerHTML = view.post ? `<i>p</i>(${TH} | data) = Beta(${num(a)}, ${num(b)})` : `<i>p</i>(${TH}) = Beta(${num(a)}, ${num(b)})`;
+  const ys = GRID.map(x => betaPdf(x, a, b));
+  const peak = Math.max(...ys.filter((_, i) => GRID[i] > 0.02 && GRID[i] < 0.98));
+  const f = frame($("p1"), { xmin: 0, xmax: 1, ys: yScale(peak), xticks: [0, 0.2, 0.4, 0.6, 0.8, 1],
+    xfmt: v => v.toFixed(1), xlabel: [["θ", true]], ylabel: "density" });
+  const pts = GRID.map((x, i) => `${f.sx(x).toFixed(1)},${f.sy(ys[i]).toFixed(1)}`);
+  el("path", { d: `M${f.sx(GRID[0])},${f.y0} L${pts.join(" L")} L${f.sx(GRID[GRID.length - 1])},${f.y0} Z`, class: "post-fill" }, f.plot);
+  el("polyline", { points: pts.join(" "), class: "post-line" }, f.plot);
+  if (view.post) {
+    const shown = thetas.slice(-800);   // fainter as they pile up, so the rug shows where the draws fall
+    const rug = el("g", { class: "rug", "fill-opacity": Math.min(0.22, Math.max(0.03, 10 / shown.length)) }, f.g);
+    for (const t of shown) el("circle", { cx: f.sx(t).toFixed(1), cy: f.y0, r: 3.2 }, rug);
+  }
+  if (view.theta !== null) {
+    const X = f.sx(view.theta);
+    const bottom = tag(f, X, f.y1 + 18, [["θ", true], ["i", true, true], [` = ${two(view.theta)}`]]);
+    el("line", { x1: X, x2: X, y1: bottom, y2: f.y0, class: "cur-line" }, f.g);
+    el("circle", { cx: X, cy: f.y0, r: 6.5, class: "cur-dot" }, f.g);
+  }
+}
+
+function drawLikelihood() {
+  const L = view.like;
+  $("k2").textContent = `2 · Likelihood of the next ${many(n, "day", "days")}`;
+  $("t2").innerHTML = L ? `<i>p</i>(<i>x</i> | ${THI} = ${two(L.theta)}) = Bin(${n}, ${two(L.theta)})` : `<i>p</i>(<i>x</i> | ${THI}) = Bin(${n}, ${THI})`;
+  const probs = L ? exact.map((_, k) => binomPmf(k, n, L.theta)) : null;
+  const f = frame($("p2"), { xmin: -0.7, xmax: n + 0.7, ys: yScale(probs ? Math.max(...probs) : 0.25), xticks: intTicks(n),
+    xfmt: String, xlabel: xLabel(), ylabel: "probability" });
+  if (!L) return;
+  const w = Math.min(0.8 * (f.sx(1) - f.sx(0)), 40);
+  probs.forEach((p, k) => el("rect", { x: f.sx(k) - w / 2, y: f.sy(p), width: w, height: f.y0 - f.sy(p),
+    class: k === L.x ? "bar hit" : "bar" }, f.plot));
+  if (L.x !== null) {
+    const X = f.sx(L.x), Y = f.sy(probs[L.x]);
+    const bottom = tag(f, X, f.y1 + 18, [["x", true], [` = ${L.x}`]]);
+    if (Y - 4 > bottom + 4) el("line", { x1: X, x2: X, y1: bottom, y2: Y - 4, class: "leader" }, f.g);
+  }
+}
+
+function drawPredictive() {
+  $("leg").hidden = !view.hist;
+  $("legN").innerHTML = `<i>N</i> = ${N.toLocaleString("en-US")}`;
+  const dens = counts.map(c => (N ? c / N : 0));
+  const peak = Math.max(...exact, ...(view.hist ? dens : []));
+  const f = frame($("p3"), { xmin: -0.7, xmax: n + 0.7, ys: yScale(peak), xticks: intTicks(n),
+    xfmt: String, xlabel: xLabel(), ylabel: "probability" });
+  if (!view.hist) return;
+  const w = Math.min(0.8 * (f.sx(1) - f.sx(0)), 40);
+  dens.forEach((d, k) => { if (d > 0) el("rect", { x: f.sx(k) - w / 2, y: f.sy(d), width: w, height: f.y0 - f.sy(d), class: "mc" }, f.plot); });
+  el("polyline", { points: exact.map((p, k) => `${f.sx(k).toFixed(1)},${f.sy(p).toFixed(1)}`).join(" "), class: "ex-line" }, f.plot);
+  exact.forEach((p, k) => el("circle", { cx: f.sx(k), cy: f.sy(p), r: 3.6, class: "ex-dot" }, f.plot));
+}
+
+function render() {
+  drawPosterior(); drawLikelihood(); drawPredictive();
+  $("count").textContent = `N = ${N.toLocaleString("en-US")}`;
+}
+
+// ---------------------------------------------------------------------------
+// Controls: the buttons, a click on the panels, the keyboard (and a presenter's clicker)
+const tap = (id, fn) => $(id).addEventListener("click", e => { e.currentTarget.blur(); fn(); });
+tap("bStep", () => { stopAuto(); stepOnce(); });
+tap("bAuto", toggleAuto);
+tap("b100", () => { stopAuto(); addDraws(100); });
+tap("b1000", () => { stopAuto(); addDraws(1000); });
+tap("bReset", () => reset());
+$("stage").addEventListener("click", () => { stopAuto(); stepOnce(); });
+$("speed").addEventListener("change", e => { e.currentTarget.blur(); if (timer !== null) startAuto(); });
+
+document.addEventListener("keydown", e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const t = e.target instanceof Element ? e.target : null;
+  if (t && t.closest("input, select, textarea, summary")) return;
+  const k = e.key;
+  if (k === " " || k === "Enter" || k === "ArrowRight" || k === "PageDown") {
+    if (t && t.closest("button")) return;   // let a focused button act
+    e.preventDefault(); stopAuto(); stepOnce();
+  } else if (k === "a" || k === "A") { toggleAuto(); }
+  else if (k === "f" || k === "F") { stopAuto(); addDraws(100); }
+  else if (k === "r" || k === "R") { reset(); }
+});
+
+const form = $("form");
+const fill = () => { for (const k in S) form.elements[k].value = S[k]; };
+form.addEventListener("submit", e => {
+  e.preventDefault();
+  const v = (k, lo, hi, int) => {
+    let x = Number(form.elements[k].value);
+    if (!Number.isFinite(x)) x = CLASS[k];
+    x = Math.min(hi, Math.max(lo, x));
+    return int ? Math.round(x) : x;
+  };
+  const days = v("days", 0, 365, true);
+  S = { a0: v("a0", 0.1, 100), b0: v("b0", 0.1, 100), days, evil: Math.min(v("evil", 0, 365, true), days), n: v("n", 1, 40, true) };
+  fill();
+  reset("New numbers. Click the panels, or press Space, to start.");
+});
+$("bClass").addEventListener("click", () => { S = { ...CLASS }; fill(); reset(); });
+
+fill();
+reset();
+})();
+</script>
+</body>
+</html>
